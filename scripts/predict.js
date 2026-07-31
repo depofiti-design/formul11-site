@@ -76,18 +76,20 @@ function matchProbabilities(lambdaHome, lambdaAway) {
   return { pHome: pHome / total, pDraw: pDraw / total, pAway: pAway / total };
 }
 
-// Puan durumundan takım hücum/savunma katsayıları çıkarır.
-function buildTeamStrengths(standingsTable) {
-  const teams = standingsTable.filter((t) => t.playedGames > 0);
+// Normalize edilmiş { id, goalsFor, goalsAgainst, played } listesinden
+// takım hücum/savunma katsayıları çıkarır. Hem football-data.org hem
+// TheSportsDB kaynaklı veri bu ortak formata çevrilip buraya veriliyor.
+function buildTeamStrengths(teamRows) {
+  const teams = teamRows.filter((t) => t.played > 0);
   const leagueAvgGoals =
-    teams.reduce((s, t) => s + t.goalsFor / t.playedGames, 0) / teams.length;
+    teams.reduce((s, t) => s + t.goalsFor / t.played, 0) / teams.length;
 
   const strengths = {};
   for (const t of teams) {
-    strengths[t.team.id] = {
-      name: t.team.name,
-      attack: t.goalsFor / t.playedGames / leagueAvgGoals,
-      defense: t.goalsAgainst / t.playedGames / leagueAvgGoals,
+    strengths[t.id] = {
+      name: t.name,
+      attack: t.goalsFor / t.played / leagueAvgGoals,
+      defense: t.goalsAgainst / t.played / leagueAvgGoals,
     };
   }
   return { strengths, leagueAvgGoals };
@@ -96,6 +98,99 @@ function buildTeamStrengths(standingsTable) {
 function confidenceLabel(pHome, pDraw, pAway) {
   const max = Math.max(pHome, pDraw, pAway);
   return Math.round(max * 100);
+}
+
+// --- Türkiye Süper Lig: TheSportsDB'nin herkese açık test anahtarı ("3") ---
+// Kayıt gerektirmiyor, football-data.org ücretsiz planında olmayan Süper
+// Lig'i buradan çekiyoruz. league id 4339 = "Turkish Super Lig".
+const TSD_BASE = "https://www.thesportsdb.com/api/v1/json/3";
+const TSD_LEAGUE_ID = "4339";
+
+function currentTurkishSeason(date = new Date()) {
+  const y = date.getUTCFullYear();
+  const m = date.getUTCMonth() + 1; // 1-12
+  return m >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+
+async function tsdGet(path) {
+  const res = await fetch(`${TSD_BASE}${path}`);
+  if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchTurkishSuperLigTable() {
+  const season = currentTurkishSeason();
+  let table = (await tsdGet(`/lookuptable.php?l=${TSD_LEAGUE_ID}&s=${season}`)).table || [];
+  const totalPlayed = table.reduce((s, t) => s + Number(t.intPlayed || 0), 0);
+  if (totalPlayed === 0) {
+    // Yeni sezon henüz başlamamış (ör. yaz arası) — bir önceki sezona düş.
+    const [startY] = season.split("-").map(Number);
+    const prevSeason = `${startY - 1}-${startY}`;
+    console.log(`TSL: ${season} sezonu boş, ${prevSeason} sezonuna düşülüyor.`);
+    await sleep(2000);
+    table = (await tsdGet(`/lookuptable.php?l=${TSD_LEAGUE_ID}&s=${prevSeason}`)).table || [];
+  }
+  return table;
+}
+
+async function runTurkishSuperLig(db, batch) {
+  console.log("-> Süper Lig (TSL, TheSportsDB) puan durumu çekiliyor...");
+  try {
+    const table = await fetchTurkishSuperLigTable();
+    if (table.length === 0) {
+      console.warn("TSL: puan durumu alınamadı, atlanıyor.");
+      return 0;
+    }
+    const teamRows = table.map((t) => ({
+      id: t.idTeam,
+      name: t.strTeam,
+      played: Number(t.intPlayed || 0),
+      goalsFor: Number(t.intGoalsFor || 0),
+      goalsAgainst: Number(t.intGoalsAgainst || 0),
+    }));
+    const { strengths, leagueAvgGoals } = buildTeamStrengths(teamRows);
+
+    await sleep(2000);
+    console.log("-> Süper Lig yaklaşan maçlar çekiliyor...");
+    const eventsRes = await tsdGet(`/eventsnextleague.php?id=${TSD_LEAGUE_ID}`);
+    const upcoming = (eventsRes.events || []).slice(0, 15);
+
+    let written = 0;
+    for (const ev of upcoming) {
+      const home = strengths[ev.idHomeTeam];
+      const away = strengths[ev.idAwayTeam];
+      if (!home || !away) continue;
+
+      const lambdaHome = leagueAvgGoals * home.attack * away.defense * HOME_ADVANTAGE;
+      const lambdaAway = leagueAvgGoals * away.attack * home.defense;
+      const { pHome, pDraw, pAway } = matchProbabilities(lambdaHome, lambdaAway);
+
+      const matchDate = ev.strTimestamp
+        ? new Date(ev.strTimestamp)
+        : new Date(`${ev.dateEvent}T${ev.strTime || "00:00:00"}Z`);
+
+      const ref = db.collection("matches").doc(`tsd-${ev.idEvent}`);
+      batch.set(ref, {
+        source: "thesportsdb.com",
+        competition_code: "TSL",
+        competition_name: "Süper Lig",
+        home_team: ev.strHomeTeam,
+        away_team: ev.strAwayTeam,
+        match_date: admin.firestore.Timestamp.fromDate(matchDate),
+        home_win_prob: Math.round(pHome * 100),
+        draw_prob: Math.round(pDraw * 100),
+        away_win_prob: Math.round(pAway * 100),
+        confidence: confidenceLabel(pHome, pDraw, pAway),
+        model: "poisson-form-v1",
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      written++;
+    }
+    return written;
+  } catch (err) {
+    console.error("TSL işlenirken hata:", err.message);
+    return 0;
+  }
 }
 
 function loadServiceAccount() {
@@ -125,7 +220,14 @@ async function run() {
         await sleep(6500);
         continue;
       }
-      const { strengths, leagueAvgGoals } = buildTeamStrengths(table);
+      const teamRows = table.map((t) => ({
+        id: t.team.id,
+        name: t.team.name,
+        played: t.playedGames,
+        goalsFor: t.goalsFor,
+        goalsAgainst: t.goalsAgainst,
+      }));
+      const { strengths, leagueAvgGoals } = buildTeamStrengths(teamRows);
 
       await sleep(6500); // ücretsiz plan: 10 istek/dk sınırı
 
@@ -166,6 +268,8 @@ async function run() {
       console.error(`${comp.code} işlenirken hata:`, err.message);
     }
   }
+
+  written += await runTurkishSuperLig(db, batch);
 
   if (written > 0) {
     await batch.commit();
