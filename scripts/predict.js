@@ -18,7 +18,8 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// football-data.org ücretsiz plana (TIER_ONE) dahil ligler.
+// football-data.org ücretsiz plana (TIER_ONE) dahil ligler. Not: TR1 (Süper
+// Lig) bu planda YOK — /v4/competitions ile teyit edildi, eklenmedi.
 const COMPETITIONS = [
   { code: "PL", name: "Premier Lig" },
   { code: "PD", name: "La Liga" },
@@ -28,7 +29,6 @@ const COMPETITIONS = [
   { code: "DED", name: "Eredivisie" },
   { code: "PPL", name: "Primeira Liga" },
   { code: "ELC", name: "Championship" },
-  { code: "TR1", name: "Süper Lig" },
   { code: "BSA", name: "Brasileirão" },
 ];
 

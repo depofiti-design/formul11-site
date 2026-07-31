@@ -133,7 +133,7 @@ function buildConfigObject(){
     premium: { price: document.getElementById('price-premium').value, period: document.getElementById('period-premium').value },
     yearly:  { price: document.getElementById('price-yearly').value,  period: document.getElementById('period-yearly').value }
   };
-  return { brand: (cfg.brand || {name:"Formül11", tagline:"Veriyle Oku, Sezgiyle Değil"}), social: social, pricing: pricing, stats: (cfg.stats || {leagues:"180+", analyses:"60K+"}) };
+  return { brand: (cfg.brand || {name:"Formül11", tagline:"Veriyle Oku, Sezgiyle Değil"}), social: social, pricing: pricing, stats: (cfg.stats || {leagues:"9", analyses:"Firestore'dan canlı"}) };
 }
 
 function generate(){
