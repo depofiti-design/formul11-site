@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formül11 - Yönetim Paneli</title>
+<style>
+  :root{--bg:#f3f4f8;--card:#ffffff;--border:#e2e4ec;--text:#14141f;--muted:#6b6f80;--accent:#2f6bff;--accent-soft:#eaf0ff;--ok:#12b76a;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;padding:32px 16px 80px;}
+  .wrap{max-width:760px;margin:0 auto;}
+  h1{font-size:24px;margin-bottom:6px;}
+  .lead{color:var(--muted);font-size:14px;margin-bottom:24px;}
+  .notice{background:#fff8e6;border:1px solid #f2d98a;color:#7a5c00;border-radius:10px;padding:14px 16px;font-size:13.5px;margin-bottom:28px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:20px;}
+  .card h2{font-size:16px;margin-bottom:14px;}
+  .row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .row:last-child{border-bottom:none;}
+  .row label.name{width:110px;font-size:14px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px;}
+  .row input[type=text]{flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;}
+  .row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);}
+  .price-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  .price-item label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;}
+  .price-item input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:6px;}
+  .actions{display:flex;gap:12px;margin:24px 0;flex-wrap:wrap;}
+  button{background:var(--accent);color:#fff;border:none;padding:13px 22px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;}
+  button.secondary{background:#fff;color:var(--text);border:1px solid var(--border);}
+  .status{font-size:13px;color:var(--ok);font-weight:600;display:none;align-items:center;gap:6px;}
+  textarea{width:100%;min-height:220px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;padding:16px;border-radius:10px;border:1px solid var(--border);background:#0f1428;color:#c9d6ff;}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚙️ Formül11 Yönetim Paneli</h1>
+  <p class="lead">Sosyal medya linklerini ve fiyatları buradan düzenle.</p>
+
+  <div class="notice">
+    <b>Nasıl çalışır?</b> Site statik dosyalardan oluştuğu için (veritabanı yok), bu panel bir <code>config.js</code> dosyası üretir. Aşağıyı doldur → <b>"config.js İndir"</b> butonuna bas → indirilen dosyayı proje klasöründeki eski <code>config.js</code>'in üzerine kaydet → <code>index.html</code>'i yenile. Değişiklikler anında görünür.
+  </div>
+
+  <div class="card">
+    <h2>📱 Sosyal Medya</h2>
+    <div id="socialForm"></div>
+    <p class="hint">Aktif etmediğin platformların ikonu sitede hiç görünmez. Sadece kullanıcı adını ya da tam linki yapıştır (https:// eklemesen de olur).</p>
+  </div>
+
+  <div class="card">
+    <h2>💳 Fiyatlandırma</h2>
+    <div class="price-grid">
+      <div class="price-item">
+        <label>Ücretsiz</label>
+        <input type="text" id="price-free" placeholder="0">
+        <input type="text" id="period-free" placeholder="/ay">
+      </div>
+      <div class="price-item">
+        <label>Premium (aylık)</label>
+        <input type="text" id="price-premium" placeholder="49">
+        <input type="text" id="period-premium" placeholder="/ay">
+      </div>
+      <div class="price-item">
+        <label>Yıllık</label>
+        <input type="text" id="price-yearly" placeholder="399">
+        <input type="text" id="period-yearly" placeholder="/yıl">
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button onclick="generate()">Önizle</button>
+    <button onclick="download()" class="secondary">⬇ config.js İndir</button>
+    <span class="status" id="status">✓ İndirildi</span>
+  </div>
+
+  <div class="card">
+    <h2>👀 Önizleme (config.js içeriği)</h2>
+    <textarea id="preview" readonly></textarea>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+var PLATFORMS = [
+  {key:'instagram', label:'Instagram', icon:'📷', base:'https://instagram.com/'},
+  {key:'youtube',   label:'YouTube',   icon:'▶️', base:'https://youtube.com/@'},
+  {key:'tiktok',    label:'TikTok',    icon:'🎵', base:'https://tiktok.com/@'},
+  {key:'x',         label:'X',        icon:'✕', base:'https://x.com/'},
+  {key:'telegram',  label:'Telegram',  icon:'✈️', base:'https://t.me/'},
+  {key:'kick',      label:'Kick',      icon:'🎮', base:'https://kick.com/'}
+];
+
+var cfg = window.SITE_CONFIG || {social:{}, pricing:{}};
+
+function buildSocialForm(){
+  var el = document.getElementById('socialForm');
+  el.innerHTML = PLATFORMS.map(function(p){
+    var s = (cfg.social && cfg.social[p.key]) || {enabled:false, url:''};
+    return '<div class="row">' +
+      '<label class="name"><input type="checkbox" id="enabled-'+p.key+'" '+(s.enabled?'checked':'')+'> '+p.icon+' '+p.label+'</label>' +
+      '<input type="text" id="url-'+p.key+'" placeholder="kullanıcı adı ya da tam link" value="'+(s.url||'').replace(/"/g,'&quot;')+'">' +
+      '</div>';
+  }).join('');
+}
+
+function fillPricing(){
+  var pr = cfg.pricing || {};
+  document.getElementById('price-free').value = (pr.free && pr.free.price) || '0';
+  document.getElementById('period-free').value = (pr.free && pr.free.period) || '/ay';
+  document.getElementById('price-premium').value = (pr.premium && pr.premium.price) || '49';
+  document.getElementById('period-premium').value = (pr.premium && pr.premium.period) || '/ay';
+  document.getElementById('price-yearly').value = (pr.yearly && pr.yearly.price) || '399';
+  document.getElementById('period-yearly').value = (pr.yearly && pr.yearly.period) || '/yıl';
+}
+
+function normalizeUrl(raw, base){
+  raw = (raw || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  return base + raw.replace(/^@/, '');
+}
+
+function buildConfigObject(){
+  var social = {};
+  PLATFORMS.forEach(function(p){
+    var enabled = document.getElementById('enabled-'+p.key).checked;
+    var rawUrl = document.getElementById('url-'+p.key).value;
+    var url = normalizeUrl(rawUrl, p.base);
+    social[p.key] = { enabled: enabled && !!url, url: url };
+  });
+  var pricing = {
+    currency: "₺",
+    free:    { price: document.getElementById('price-free').value,    period: document.getElementById('period-free').value },
+    premium: { price: document.getElementById('price-premium').value, period: document.getElementById('period-premium').value },
+    yearly:  { price: document.getElementById('price-yearly').value,  period: document.getElementById('period-yearly').value }
+  };
+  return { brand: (cfg.brand || {name:"Formül11", tagline:"Veriyle Oku, Sezgiyle Değil"}), social: social, pricing: pricing, stats: (cfg.stats || {leagues:"180+", analyses:"60K+"}) };
+}
+
+function generate(){
+  var obj = buildConfigObject();
+  var content = "/* FORMÜL11 - SİTE AYARLARI (panel.html üzerinden oluşturuldu) */\nwindow.SITE_CONFIG = " + JSON.stringify(obj, null, 2) + ";\n";
+  document.getElementById('preview').value = content;
+  return content;
+}
+
+function download(){
+  var content = generate();
+  var blob = new Blob([content], {type:'text/javascript'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'config.js';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  var status = document.getElementById('status');
+  status.style.display = 'inline-flex';
+  setTimeout(function(){ status.style.display='none'; }, 2500);
+}
+
+buildSocialForm();
+fillPricing();
+generate();
+</script>
+</body>
+</html>
