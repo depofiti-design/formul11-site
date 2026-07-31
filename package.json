@@ -1,0 +1,13 @@
+{
+  "name": "formul11-data-pipeline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Formül11 için günlük maç verisi çekme ve Poisson tabanlı olasılık hesaplama scripti.",
+  "type": "module",
+  "scripts": {
+    "predict": "node scripts/predict.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

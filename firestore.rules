@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Maç/tahmin verisi: herkes okuyabilir, sadece sunucu tarafı (Admin SDK,
+    // GitHub Actions cron) yazabilir — bu kurallar client SDK içindir, Admin
+    // SDK zaten kuralları bypass eder.
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Premium/Yıllık "ilgi kaydı" formu: herkes yeni kayıt oluşturabilir
+    // (e-posta bırakabilir), ama var olan kayıtları okuyamaz/değiştiremez —
+    // toplu e-posta sızıntısını/scrape'i engellemek için.
+    match /premium_interest/{docId} {
+      allow create: if request.resource.data.keys().hasAll(['email', 'plan', 'created_at'])
+                    && request.resource.data.email is string
+                    && request.resource.data.email.size() < 200
+                    && request.resource.data.plan in ['premium', 'yearly'];
+      allow read, update, delete: if false;
+    }
+
+    // Varsayılan: her şey kapalı.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

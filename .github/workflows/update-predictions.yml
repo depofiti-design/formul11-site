@@ -1,0 +1,25 @@
+name: Günlük maç tahmini güncelle
+
+on:
+  schedule:
+    # Her gün 05:00 UTC (TR saatiyle 08:00) - maçların çoğu henüz başlamamışken
+    - cron: "0 5 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - run: npm run predict
+        env:
+          FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
