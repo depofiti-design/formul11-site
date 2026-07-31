@@ -6,18 +6,24 @@ Formül11 — yapay zeka/istatistik destekli futbol maç analizi platformu. Bahi
 
 İsim geçmişi, hukuki notlar, dosya yapısı gibi başlangıç bağlamı için `PROJE-NOTLARI.md` dosyasına bak — bu dosya (CLAUDE.md) ondan sonraki gerçek mimari kurulumu anlatıyor.
 
-## Mevcut durum (31 Temmuz 2026 itibarıyla)
+## Mevcut durum (1 Ağustos 2026 itibarıyla)
 
-Statik HTML sitesi artık gerçek bir Firebase backend'ine ve otomatik veri hattına bağlı. Sırasıyla şunlar kuruldu:
+Statik HTML sitesi artık gerçek bir Firebase backend'ine ve otomatik veri hattına bağlı, pipeline canlı veriyle test edildi. Sırasıyla şunlar kuruldu:
 
-1. **Firebase projesi `formul11`** — Firestore (eur3 bölgesi) etkin, güvenlik kuralları deploy edildi.
-2. **Poisson tabanlı tahmin motoru** (`scripts/predict.js`) — football-data.org'un ücretsiz planına dahil 10 ligin puan durumundan takım hücum/savunma katsayıları çıkarıp yaklaşan maçlar için 1-X-2 olasılığı hesaplıyor. Gerçek bir "AI modeli" değil, şeffaf ve açıklanabilir istatistiksel bir yöntem — sitenin "şeffaf metodoloji" vaadiyle tutarlı, uydurma değil.
-3. **GitHub Actions cron** (`.github/workflows/update-predictions.yml`) — her gün 05:00 UTC'de `predict.js`'i çalıştırıp sonucu Firestore'a yazıyor. Firebase Cloud Functions kullanılmadı çünkü onlar Blaze (ücretli) plan gerektiriyor; GitHub Actions'ın ücretsiz kotası (public repo'da sınırsız, private'ta 2000dk/ay) bu iş için yeterli ve kalıcı olarak ücretsiz.
-4. **index.html** artık `firebase-app.js` üzerinden Firestore'dan canlı veri okuyor (öne çıkan analizler tablosu + takip edilen maç sayısı istatistiği). Eskiden hardcoded olan "180+ Lig / 60K+ Analiz" gibi doğrulanamaz iddialar kaldırıldı, gerçek kapsamla ("10 Büyük Lig") değiştirildi.
+1. **Firebase projesi `formul11`** — Firestore (eur3 bölgesi) etkin, güvenlik kuralları deploy edildi ve test edildi (matches: public read/no write, premium_interest: public create-only).
+2. **Poisson tabanlı tahmin motoru** (`scripts/predict.js`) — football-data.org'un ücretsiz planına dahil **9** ligin (Premier Lig, La Liga, Bundesliga, Serie A, Ligue 1, Eredivisie, Primeira Liga, Championship, Brasileirão) puan durumundan takım hücum/savunma katsayıları çıkarıp yaklaşan maçlar için 1-X-2 olasılığı hesaplıyor. Gerçek bir "AI modeli" değil, şeffaf ve açıklanabilir istatistiksel bir yöntem. **Önemli:** Türkiye Süper Lig (TR1) bu ücretsiz plana dahil DEĞİL — `/v4/competitions` ile teyit edildi, ilk denemede 404 verdi, script ve site metninden çıkarıldı. Sitede "Süper Lig" iddiası YOK, sadece gerçekten kapsanan ligler adı geçiyor.
+3. **GitHub Actions cron** (`.github/workflows/update-predictions.yml`) — her gün 05:00 UTC'de `predict.js`'i çalıştırıp sonucu Firestore'a yazıyor. İlk manuel çalıştırmada **39 maç** başarıyla yazıldı. Firebase Cloud Functions kullanılmadı çünkü onlar Blaze (ücretli) plan gerektiriyor; GitHub Actions'ın ücretsiz kotası bu iş için kalıcı olarak yeterli.
+4. **index.html** artık `firebase-app.js` üzerinden Firestore'dan canlı veri okuyor (öne çıkan analizler tablosu + takip edilen maç sayısı istatistiği). Eskiden hardcoded olan "180+ Lig / 60K+ Analiz" gibi doğrulanamaz iddialar kaldırıldı, gerçek kapsamla ("9 Büyük Lig") değiştirildi.
 5. **Gizlilik Politikası (`gizlilik.html`) ve Kullanım Koşulları (`kosullar.html`)** yazıldı — şirket resmen kurulmadığı için hakkimizda.html'deki aynı dürüstlük ilkesiyle ("kuruluş süreci devam ediyor", uydurma şirket bilgisi yok) hazırlandı.
 6. **Premium/Yıllık butonları** gerçek ödeme almıyor — "Yakında, haber ver" bekleme listesi (e-posta, Firestore `premium_interest` koleksiyonu). Stripe entegrasyonu, kullanıcı gerçek kimlik/IBAN bilgisiyle bir Stripe hesabı açtığında yapılacak.
 7. **GitHub:** `depofiti-design/formul11-site` (private repo).
-8. **Vercel:** proje adı `formul11`, takım `depofiti-1840s-projects`, GitHub reposuna bağlı, her push otomatik deploy tetikliyor. Canlı URL: **https://formul11.vercel.app** (SSO koruması kapalı, herkese açık — Gezicorn'da yaşanan sorun burada baştan kontrol edildi).
+8. **Vercel:** proje adı `formul11`, takım `depofiti-1840s-projects`, GitHub reposuna bağlı, her push otomatik deploy tetikliyor. Canlı URL: **https://formul11.vercel.app** (SSO koruması kapalı, herkese açık).
+
+### ⚠️ Bilinen tuzak: git commit author'ı Vercel deploy'unu BLOCKED yapabilir
+
+macOS'un varsayılan git identity'si (`YAKUP BAL <yakupbal@YAKUP-MacBook-Air.local>`) ile atılan commit'ler Vercel tarafından **"no git user associated with the commit"** hatasıyla `BLOCKED` duruma düşüyor (private repo + Vercel'in commit author'ı GitHub hesabıyla eşleştirememesi — bkz. [Vercel troubleshoot-project-collaboration](https://vercel.com/docs/deployments/troubleshoot-project-collaboration#account-configuration)). Bu hem `git push` sonrası otomatik deploy'da hem de `vercel --prod` CLI deploy'unda aynı şekilde oluyor (ikisi de commit metadata'sını okuyor).
+
+**Kalıcı çözüm uygulandı:** global git config artık `depofiti-design <227688926+depofiti-design@users.noreply.github.com>` (GitHub'ın otomatik doğrulanmış noreply e-postası, `gh api user` ile alınan id+login'den türetildi). Bu ayar `~/.gitconfig` seviyesinde olduğu için tüm projelerde geçerli — Gezicorn/BonusRota'da da aynı sorun çıkmamalı. Eğer ileride yine `BLOCKED`/`readyState` sorunu görülürse: `git log -1 --format='%ae'` ile commit e-postasını kontrol et, global git config'in bozulup bozulmadığına bak.
 
 ## Firebase config (aktif proje)
 
@@ -38,15 +44,9 @@ const firebaseConfig = {
 - `matches` — public read, client write yasak (`firestore.rules`). Sadece Admin SDK (GitHub Actions üzerinden `serviceAccountKey.json` / `FIREBASE_SERVICE_ACCOUNT_JSON` secret'ı ile) yazabiliyor. Alanlar: `competition_code`, `competition_name`, `home_team`, `away_team`, `match_date`, `home_win_prob`, `draw_prob`, `away_win_prob`, `confidence`, `model`, `updated_at`.
 - `premium_interest` — public create-only (e-posta bırakma), read/update/delete client'tan kapalı (toplu e-posta sızıntısını önlemek için). Alanlar: `email`, `plan`, `created_at`.
 
-## ⚠️ Kalan tek manuel adım: football-data.org API anahtarı
+## football-data.org API anahtarı — TAMAMLANDI
 
-Tahmin pipeline'ı **henüz canlı veri çekmiyor** çünkü `FOOTBALL_DATA_API_KEY` GitHub secret'ı eksik. Bu, Claude Code'un yapamadığı tek adım — football-data.org'da e-posta ile hesap açmak e-posta onay tıklaması gerektiriyor ve bu ortamda gerçek bir tarayıcı kontrolü yok.
-
-**Yapılması gereken (2 dakika, ücretsiz, kart bilgisi istemiyor):**
-1. https://www.football-data.org/client/register adresinden ücretsiz kaydol.
-2. E-postana gelen onay linkine tıkla.
-3. Hesap panelinden API key'i kopyala.
-4. Terminalde: `gh secret set FOOTBALL_DATA_API_KEY --repo depofiti-design/formul11-site` komutunu çalıştırıp key'i yapıştır — ya da Claude Code'a key'i ver, o ekler.
+`FOOTBALL_DATA_API_KEY` GitHub secret'ı eklendi ve pipeline canlı veriyle test edildi (39 maç Firestore'a yazıldı, 9 gerçek lig üzerinden). Workflow'u elle tetiklemek için: `gh workflow run update-predictions.yml --repo depofiti-design/formul11-site`.
 
 Bu secret eklenince workflow'u elle tetiklemek için: `gh workflow run update-predictions.yml --repo depofiti-design/formul11-site` — ya da bir sonraki gün 05:00 UTC'de otomatik çalışır.
 
