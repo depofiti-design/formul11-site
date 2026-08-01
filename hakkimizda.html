@@ -35,7 +35,8 @@
   .wrap{max-width:820px;margin:0 auto;padding:0 24px;}
   header{border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(251,251,253,0.9);backdrop-filter:blur(8px);z-index:50;}
   .nav{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;max-width:1080px;margin:0 auto;}
-  .logo{font-weight:800;font-size:19px;}
+  .logo{font-weight:800;font-size:19px;display:flex;align-items:center;gap:8px;}
+  .logo-icon{width:22px;height:22px;display:block;}
   .logo em{color:var(--accent);font-style:normal;}
   .navlinks{display:flex;gap:26px;font-size:14px;color:var(--muted);}
   .navlinks a:hover, .navlinks a.active{color:var(--text);}
@@ -68,7 +69,7 @@
 
 <header>
   <div class="nav">
-    <div class="logo">Formül<em>11</em></div>
+    <div class="logo"><img src="logo-icon.svg" alt="" class="logo-icon">Formül<em>11</em></div>
     <div class="navlinks">
       <a href="index.html">Ana Sayfa</a>
       <a href="hakkimizda.html" class="active">Hakkımızda</a>
