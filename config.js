@@ -16,11 +16,11 @@ window.SITE_CONFIG = {
     tagline: "Veriyle Oku, Sezgiyle Değil"
   },
   social: {
-    instagram: { enabled: false, url: "" },
+    instagram: { enabled: true, url: "https://instagram.com/formul11pro" },
     youtube:   { enabled: false, url: "" },
     tiktok:    { enabled: false, url: "" },
-    x:         { enabled: false, url: "" },
-    telegram:  { enabled: false, url: "" },
+    x:         { enabled: true, url: "https://x.com/formul11pro" },
+    telegram:  { enabled: true, url: "https://t.me/formul11pro" },
     kick:      { enabled: false, url: "" }
   },
   pricing: {
@@ -30,7 +30,7 @@ window.SITE_CONFIG = {
     yearly: { price: "399", period: "/yıl" }
   },
   stats: {
-    leagues: "180+",
-    analyses: "60K+"
+    leagues: "9",
+    analyses: "Firestore'dan canlı"
   }
 };
