@@ -22,6 +22,17 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // Site ayarları (sosyal medya linkleri, fiyatlandırma metni): herkes
+    // okuyabilir (site bunu render ediyor). Yazma admin.html'den şifreyle
+    // korunuyor ama Firestore seviyesinde gerçek kullanıcı doğrulaması yok —
+    // bu, kullanıcının diğer sitelerinde (Gezicorn/BonusRota) kabul ettiği
+    // aynı bilinçli risk seviyesi. Sadece "main" dokümanına, sadece
+    // beklenen alanlarla yazılabilir — blast radius'u sınırlamak için.
+    match /site_config/main {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasOnly(['social', 'pricing', 'updated_at']);
+    }
+
     // Varsayılan: her şey kapalı.
     match /{document=**} {
       allow read, write: if false;

@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getFirestore, collection, query, where, orderBy, limit, getDocs, getCountFromServer, addDoc, Timestamp
+  getFirestore, collection, query, where, orderBy, limit, getDocs, getCountFromServer, addDoc, Timestamp, doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -153,6 +153,35 @@ function setupWaitlist() {
   });
 }
 
+async function loadSiteConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'site_config', 'main'));
+    if (!snap.exists()) return;
+    const cfg = snap.data();
+
+    const social = cfg.social || {};
+    document.querySelectorAll('#socialRow a[data-platform]').forEach(function (a) {
+      const key = a.getAttribute('data-platform');
+      const s = social[key];
+      if (s && s.enabled && s.url) { a.href = s.url; a.style.display = 'flex'; }
+      else { a.style.display = 'none'; }
+    });
+
+    const pricing = cfg.pricing || {};
+    ['free', 'premium', 'yearly'].forEach(function (key) {
+      const p = pricing[key];
+      if (!p) return;
+      const priceEl = document.querySelector('[data-price="' + key + '"]');
+      const periodEl = document.querySelector('[data-period="' + key + '"]');
+      if (priceEl) priceEl.textContent = p.price + (pricing.currency || '₺');
+      if (periodEl) periodEl.textContent = p.period;
+    });
+  } catch (err) {
+    console.error('Site ayarları yüklenemedi:', err);
+  }
+}
+
 loadAnalizler();
 loadMatchCount();
 setupWaitlist();
+loadSiteConfig();

@@ -127,19 +127,7 @@
   </div>
 </footer>
 
-<script src="config.js"></script>
-<script>
-(function(){
-  var cfg = window.SITE_CONFIG || {};
-  var social = cfg.social || {};
-  document.querySelectorAll('#socialRow a[data-platform]').forEach(function(a){
-    var key = a.getAttribute('data-platform');
-    var s = social[key];
-    if (s && s.enabled && s.url) { a.href = s.url; a.style.display = 'flex'; }
-    else { a.style.display = 'none'; }
-  });
-})();
-</script>
+<script type="module" src="social-icons.js"></script>
 
 </body>
 </html>

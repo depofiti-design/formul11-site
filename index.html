@@ -231,31 +231,6 @@
   </div>
 </footer>
 
-<script src="config.js"></script>
-<script>
-(function(){
-  var cfg = window.SITE_CONFIG || {};
-  // Sosyal ikonlar: sadece enabled + url dolu olanlar görünür
-  var social = cfg.social || {};
-  document.querySelectorAll('#socialRow a[data-platform]').forEach(function(a){
-    var key = a.getAttribute('data-platform');
-    var s = social[key];
-    if (s && s.enabled && s.url) { a.href = s.url; a.style.display = 'flex'; }
-    else { a.style.display = 'none'; }
-  });
-  // Fiyatlandırma
-  var pricing = cfg.pricing || {};
-  ['free','premium','yearly'].forEach(function(key){
-    var p = pricing[key];
-    if (!p) return;
-    var priceEl = document.querySelector('[data-price="'+key+'"]');
-    var periodEl = document.querySelector('[data-period="'+key+'"]');
-    if (priceEl) priceEl.textContent = p.price + (pricing.currency || '₺');
-    if (periodEl) periodEl.textContent = p.period;
-  });
-})();
-</script>
-
 <script type="module" src="firebase-app.js"></script>
 
 </body>

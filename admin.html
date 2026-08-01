@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formül11 - Yönetim Paneli</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{--bg:#f3f4f8;--card:#ffffff;--border:#e2e4ec;--text:#14141f;--muted:#6b6f80;--accent:#2f6bff;--accent-soft:#eaf0ff;--ok:#12b76a;--err:#e5484d;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;padding:32px 16px 80px;}
+  .wrap{max-width:760px;margin:0 auto;}
+  h1{font-size:24px;margin-bottom:6px;display:flex;align-items:center;gap:10px;}
+  h1 img{width:28px;height:28px;}
+  .lead{color:var(--muted);font-size:14px;margin-bottom:24px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:20px;}
+  .card h2{font-size:16px;margin-bottom:14px;}
+  .row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+  .row:last-child{border-bottom:none;}
+  .row label.name{width:110px;font-size:14px;font-weight:600;flex-shrink:0;display:flex;align-items:center;gap:8px;}
+  .row input[type=text]{flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;}
+  .row input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);}
+  .price-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+  .price-item label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;}
+  .price-item input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:6px;}
+  .actions{display:flex;gap:12px;margin:24px 0;flex-wrap:wrap;align-items:center;}
+  button{background:var(--accent);color:#fff;border:none;padding:13px 22px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;}
+  button:disabled{opacity:0.6;cursor:default;}
+  .status{font-size:13.5px;font-weight:600;}
+  .status.ok{color:var(--ok);}
+  .status.err{color:var(--err);}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+
+  #gate{max-width:360px;margin:120px auto;text-align:center;}
+  #gate input{width:100%;padding:14px 16px;border:1px solid var(--border);border-radius:10px;font-size:15px;margin:20px 0 12px;text-align:center;}
+  #gate button{width:100%;}
+  #gate .err{color:var(--err);font-size:13px;margin-top:10px;display:none;}
+  #panel{display:none;}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h1 style="justify-content:center;">🔒 Formül11 Panel</h1>
+  <p class="lead">Devam etmek için şifreyi gir</p>
+  <input type="password" id="pw" placeholder="Şifre">
+  <button onclick="checkPw()">Giriş Yap</button>
+  <div class="err" id="pwErr">Yanlış şifre.</div>
+</div>
+
+<div id="panel">
+<div class="wrap">
+  <h1><img src="logo-icon.svg" alt="">Formül11 Yönetim Paneli</h1>
+  <p class="lead">Sosyal medya linklerini ve fiyatları buradan düzenle — kaydet dediğin an sitede canlı olur, git push gerekmez.</p>
+
+  <div class="card">
+    <h2>📱 Sosyal Medya</h2>
+    <div id="socialForm">Yükleniyor…</div>
+    <p class="hint">Aktif etmediğin platformların ikonu sitede hiç görünmez.</p>
+  </div>
+
+  <div class="card">
+    <h2>💳 Fiyatlandırma</h2>
+    <div class="price-grid" id="pricingForm">Yükleniyor…</div>
+  </div>
+
+  <div class="actions">
+    <button id="saveBtn" onclick="save()">Kaydet</button>
+    <span class="status" id="status"></span>
+  </div>
+</div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, Timestamp }
+    from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+  const ADMIN_PASSWORD = "formul112025";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDpQX1fBXrQZEtL8Vvvu8chba7OooWFXxs",
+    authDomain: "formul11.firebaseapp.com",
+    projectId: "formul11",
+    storageBucket: "formul11.firebasestorage.app",
+    messagingSenderId: "809645418846",
+    appId: "1:809645418846:web:136be1ef0ab6cbb65987cf"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const configRef = doc(db, "site_config", "main");
+
+  const PLATFORMS = [
+    { key: 'instagram', label: 'Instagram', icon: '📷' },
+    { key: 'youtube',   label: 'YouTube',   icon: '▶️' },
+    { key: 'tiktok',    label: 'TikTok',    icon: '🎵' },
+    { key: 'x',         label: 'X',         icon: '✕' },
+    { key: 'telegram',  label: 'Telegram',  icon: '✈️' },
+    { key: 'kick',      label: 'Kick',      icon: '🎮' },
+  ];
+
+  let currentConfig = null;
+
+  function buildSocialForm(social) {
+    const el = document.getElementById('socialForm');
+    el.innerHTML = PLATFORMS.map(function (p) {
+      const s = (social && social[p.key]) || { enabled: false, url: '' };
+      return '<div class="row">' +
+        '<label class="name"><input type="checkbox" id="enabled-' + p.key + '" ' + (s.enabled ? 'checked' : '') + '> ' + p.icon + ' ' + p.label + '</label>' +
+        '<input type="text" id="url-' + p.key + '" placeholder="tam link (https://...)" value="' + (s.url || '').replace(/"/g, '&quot;') + '">' +
+        '</div>';
+    }).join('');
+  }
+
+  function buildPricingForm(pricing) {
+    const p = pricing || {};
+    const el = document.getElementById('pricingForm');
+    el.innerHTML =
+      '<div class="price-item"><label>Ücretsiz</label>' +
+        '<input type="text" id="price-free" value="' + ((p.free && p.free.price) || '0') + '">' +
+        '<input type="text" id="period-free" value="' + ((p.free && p.free.period) || '/ay') + '"></div>' +
+      '<div class="price-item"><label>Premium</label>' +
+        '<input type="text" id="price-premium" value="' + ((p.premium && p.premium.price) || '49') + '">' +
+        '<input type="text" id="period-premium" value="' + ((p.premium && p.premium.period) || '/ay') + '"></div>' +
+      '<div class="price-item"><label>Yıllık</label>' +
+        '<input type="text" id="price-yearly" value="' + ((p.yearly && p.yearly.price) || '399') + '">' +
+        '<input type="text" id="period-yearly" value="' + ((p.yearly && p.yearly.period) || '/yıl') + '"></div>';
+  }
+
+  async function loadConfig() {
+    const snap = await getDoc(configRef);
+    currentConfig = snap.exists() ? snap.data() : { social: {}, pricing: {} };
+    buildSocialForm(currentConfig.social);
+    buildPricingForm(currentConfig.pricing);
+  }
+
+  window.save = async function () {
+    const saveBtn = document.getElementById('saveBtn');
+    const status = document.getElementById('status');
+    saveBtn.disabled = true;
+    status.textContent = '';
+
+    const social = {};
+    PLATFORMS.forEach(function (p) {
+      social[p.key] = {
+        enabled: document.getElementById('enabled-' + p.key).checked,
+        url: document.getElementById('url-' + p.key).value.trim(),
+      };
+    });
+    const pricing = {
+      currency: '₺',
+      free: { price: document.getElementById('price-free').value, period: document.getElementById('period-free').value },
+      premium: { price: document.getElementById('price-premium').value, period: document.getElementById('period-premium').value },
+      yearly: { price: document.getElementById('price-yearly').value, period: document.getElementById('period-yearly').value },
+    };
+
+    try {
+      await setDoc(configRef, { social: social, pricing: pricing, updated_at: Timestamp.now() });
+      status.textContent = '✓ Kaydedildi, site canlı güncellendi';
+      status.className = 'status ok';
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Kaydedilemedi: ' + err.message;
+      status.className = 'status err';
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
+
+  window.checkPw = function () {
+    const val = document.getElementById('pw').value;
+    if (val === ADMIN_PASSWORD) {
+      sessionStorage.setItem('formul11_admin_ok', '1');
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('panel').style.display = 'block';
+      loadConfig();
+    } else {
+      document.getElementById('pwErr').style.display = 'block';
+    }
+  };
+
+  document.getElementById('pw').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') window.checkPw();
+  });
+
+  if (sessionStorage.getItem('formul11_admin_ok') === '1') {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('panel').style.display = 'block';
+    loadConfig();
+  }
+</script>
+
+</body>
+</html>
