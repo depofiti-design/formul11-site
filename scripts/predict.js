@@ -214,7 +214,25 @@ async function run() {
     try {
       console.log(`-> ${comp.name} (${comp.code}) puan durumu çekiliyor...`);
       const standingsRes = await apiGet(`/competitions/${comp.code}/standings`);
-      const table = standingsRes.standings?.find((s) => s.type === "TOTAL")?.table || [];
+      let table = standingsRes.standings?.find((s) => s.type === "TOTAL")?.table || [];
+
+      // football-data.org "current season" bazen yeni sezona geçmiş oluyor
+      // (henüz hiç maç oynanmamış, herkes 0 puan/0 maç). Bu durumda takım
+      // güçlerini hesaplayacak veri kalmıyor ve her maç sessizce atlanıyor
+      // (Serie A/Ligue 1/Eredivisie/Championship'te tam bu yüzden hiç yazı
+      // çıkmıyordu). Çözüm: bir önceki (tamamlanmış) sezona düş.
+      const hasPlayedData = table.some((t) => t.playedGames > 0);
+      if (table.length > 0 && !hasPlayedData) {
+        const seasonStartYear = standingsRes.season?.startDate
+          ? new Date(standingsRes.season.startDate).getUTCFullYear()
+          : new Date().getUTCFullYear();
+        const prevYear = seasonStartYear - 1;
+        console.log(`${comp.name}: yeni sezon henüz oynanmadı, ${prevYear} sezonuna düşülüyor...`);
+        await sleep(6500);
+        const prevRes = await apiGet(`/competitions/${comp.code}/standings?season=${prevYear}`);
+        table = prevRes.standings?.find((s) => s.type === "TOTAL")?.table || [];
+      }
+
       if (table.length === 0) {
         console.warn(`${comp.code}: puan durumu boş, atlanıyor`);
         await sleep(6500);
