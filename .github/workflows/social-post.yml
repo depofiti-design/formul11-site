@@ -1,0 +1,24 @@
+name: Sosyal medya postu gönder
+
+on:
+  schedule:
+    # 06,09,12,15,18 UTC = TR saatiyle 09:00, 12:00, 15:00, 18:00, 21:00 (günde 5 post, 3 saat arayla)
+    - cron: "0 6,9,12,15,18 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: node scripts/post-social.js
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

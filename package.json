@@ -5,7 +5,8 @@
   "description": "Formül11 için günlük maç verisi çekme ve Poisson tabanlı olasılık hesaplama scripti.",
   "type": "module",
   "scripts": {
-    "predict": "node scripts/predict.js"
+    "predict": "node scripts/predict.js",
+    "post-social": "node scripts/post-social.js"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0"
