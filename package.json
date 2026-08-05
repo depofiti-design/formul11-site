@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "predict": "node scripts/predict.js",
+    "evaluate": "node scripts/evaluate-predictions.js",
     "post-social": "node scripts/post-social.js"
   },
   "dependencies": {
