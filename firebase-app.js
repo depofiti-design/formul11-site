@@ -49,16 +49,27 @@ function renderMatches(el, matches, emptyMessage) {
   });
 }
 
+// Sabit lig sırası: "Genel" sekmesi her ligden en yakın maçı gösterir, sadece
+// tarihe göre en yakın maçları almaz. Aksi halde takvimi erken başlayan ligler
+// (ör. Brasileirão) diğerlerini (ör. Serie A, sezonu 22 Ağustos'ta başlıyor)
+// önizlemeden tamamen dışarıda bırakabiliyordu — her lig kalıcı olarak görünür
+// kalsın diye bu şekilde düzeltildi.
+var COMPETITION_ORDER = ['PL', 'PD', 'BL1', 'SA', 'FL1', 'DED', 'PPL', 'ELC', 'BSA'];
+
 async function loadGenel(el) {
   const matchesRef = collection(db, 'matches');
-  const q = query(matchesRef, orderBy('match_date', 'asc'), limit(12));
+  const q = query(matchesRef, orderBy('match_date', 'asc'), limit(150));
   const snap = await getDocs(q);
-  const matches = [];
+  const soonestByComp = new Map();
   snap.forEach(function (doc) {
     const m = doc.data();
-    if (m.competition_code !== 'TSL') matches.push(m);
+    if (m.competition_code === 'TSL') return;
+    if (!soonestByComp.has(m.competition_code)) soonestByComp.set(m.competition_code, m); // sorgu tarihe göre artan, ilk görülen = en yakın
   });
-  renderMatches(el, matches.slice(0, 6), 'Henüz analiz eklenmedi, ilk otomatik güncelleme yakında çalışacak.');
+  const matches = COMPETITION_ORDER
+    .map(function (code) { return soonestByComp.get(code); })
+    .filter(Boolean);
+  renderMatches(el, matches, 'Henüz analiz eklenmedi, ilk otomatik güncelleme yakında çalışacak.');
 }
 
 async function loadTurkiye(el) {
