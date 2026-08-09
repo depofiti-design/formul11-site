@@ -31,13 +31,26 @@ if (state.next_index >= queue.length) {
 const item = queue[state.next_index];
 const photoUrl = `${PUBLIC_BASE_URL}/${item.file}`;
 
-const body = { chat_id: CHAT_ID, photo: photoUrl };
-if (item.caption) body.caption = item.caption;
+// Telegram'a photo=URL vererek göndermek yerine görseli kendimiz indirip
+// multipart/form-data ile yüklüyoruz. URL yöntemi iki farklı şekilde
+// kırıldı: önce 5MB üstü dosyalarda, sonra (dosya küçültülmesine rağmen)
+// "wrong type of the web page content" hatasıyla — muhtemelen Telegram'ın
+// aynı URL için önbelleğe aldığı başarısız bir fetch denemesi. Doğrudan
+// yükleme bu URL-fetch tuhaflıklarının tamamını devre dışı bırakıyor.
+const imgRes = await fetch(photoUrl);
+if (!imgRes.ok) {
+  throw new Error(`Görsel indirilemedi: ${photoUrl} -> HTTP ${imgRes.status}`);
+}
+const imgBlob = await imgRes.blob();
+
+const form = new FormData();
+form.append("chat_id", CHAT_ID);
+if (item.caption) form.append("caption", item.caption);
+form.append("photo", imgBlob, item.file);
 
 const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
+  body: form,
 });
 const result = await res.json();
 
