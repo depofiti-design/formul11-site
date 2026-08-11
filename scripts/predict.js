@@ -61,19 +61,63 @@ function poissonPmf(k, lambda) {
   return Math.exp(logP);
 }
 
-// Beklenen gol ortalamalarından 1-X-2 olasılıklarını hesaplar.
+// Dixon-Coles (1997) düşük skor düzeltmesi: bağımsız Poisson varsayımı
+// (ev/deplasman gollerinin birbirinden tamamen bağımsız olduğu) gerçekte
+// düşük skorlu maçlarda (özellikle beraberliklerde) sapıyor — saf Poisson
+// modeli beraberlik olasılığını sistematik olarak düşük hesaplıyor. Dixon &
+// Coles'un orijinal makalesinde İngiltere ligleri için kestirilen rho
+// (~-0.13) burada da kullanılıyor; kendi verimizden rho kestirmek için
+// (henüz) yeterli maç/sonuç birikmedi, literatürdeki standart değer
+// belgelenmiş bir yaklaşıklık olarak uygulanıyor.
+const DIXON_COLES_RHO = -0.13;
+
+function dixonColesTau(h, a, lambdaHome, lambdaAway, rho) {
+  if (h === 0 && a === 0) return 1 - lambdaHome * lambdaAway * rho;
+  if (h === 1 && a === 0) return 1 + lambdaAway * rho;
+  if (h === 0 && a === 1) return 1 + lambdaHome * rho;
+  if (h === 1 && a === 1) return 1 - rho;
+  return 1;
+}
+
+// Tüm skor ızgarasını (0-0'dan MAX_GOALS-MAX_GOALS'a) tek seferde kurar,
+// hem 1-X-2 hem toplam gol alt/üst olasılıkları buradan aynı ızgaradan
+// türetilir — böylece iki tahmin türü birbirinden bağımsız/tutarsız
+// hesaplanmış olmaz.
+function buildScoreGrid(lambdaHome, lambdaAway) {
+  const grid = [];
+  let total = 0;
+  for (let h = 0; h <= MAX_GOALS; h++) {
+    grid[h] = [];
+    for (let a = 0; a <= MAX_GOALS; a++) {
+      let p =
+        poissonPmf(h, lambdaHome) *
+        poissonPmf(a, lambdaAway) *
+        dixonColesTau(h, a, lambdaHome, lambdaAway, DIXON_COLES_RHO);
+      if (p < 0) p = 0; // rho teorik uçlarda negatif üretebilir, güvenlik payı
+      grid[h][a] = p;
+      total += p;
+    }
+  }
+  for (let h = 0; h <= MAX_GOALS; h++) {
+    for (let a = 0; a <= MAX_GOALS; a++) grid[h][a] /= total; // kuyruk kesiminden kalan artığı normalize et
+  }
+  return grid;
+}
+
+// Beklenen gol ortalamalarından 1-X-2 ve 2.5 alt/üst toplam gol olasılıklarını hesaplar.
 function matchProbabilities(lambdaHome, lambdaAway) {
-  let pHome = 0, pDraw = 0, pAway = 0;
+  const grid = buildScoreGrid(lambdaHome, lambdaAway);
+  let pHome = 0, pDraw = 0, pAway = 0, pOver25 = 0;
   for (let h = 0; h <= MAX_GOALS; h++) {
     for (let a = 0; a <= MAX_GOALS; a++) {
-      const p = poissonPmf(h, lambdaHome) * poissonPmf(a, lambdaAway);
+      const p = grid[h][a];
       if (h > a) pHome += p;
       else if (h === a) pDraw += p;
       else pAway += p;
+      if (h + a > 2.5) pOver25 += p;
     }
   }
-  const total = pHome + pDraw + pAway; // kuyruk kesiminden kalan artığı normalize et
-  return { pHome: pHome / total, pDraw: pDraw / total, pAway: pAway / total };
+  return { pHome, pDraw, pAway, pOver25, pUnder25: 1 - pOver25 };
 }
 
 // Normalize edilmiş { id, goalsFor, goalsAgainst, played } listesinden
@@ -163,7 +207,7 @@ async function runTurkishSuperLig(db, batch) {
 
       const lambdaHome = leagueAvgGoals * home.attack * away.defense * HOME_ADVANTAGE;
       const lambdaAway = leagueAvgGoals * away.attack * home.defense;
-      const { pHome, pDraw, pAway } = matchProbabilities(lambdaHome, lambdaAway);
+      const { pHome, pDraw, pAway, pOver25, pUnder25 } = matchProbabilities(lambdaHome, lambdaAway);
 
       const matchDate = ev.strTimestamp
         ? new Date(ev.strTimestamp)
@@ -180,8 +224,10 @@ async function runTurkishSuperLig(db, batch) {
         home_win_prob: Math.round(pHome * 100),
         draw_prob: Math.round(pDraw * 100),
         away_win_prob: Math.round(pAway * 100),
+        over_2_5_prob: Math.round(pOver25 * 100),
+        under_2_5_prob: Math.round(pUnder25 * 100),
         confidence: confidenceLabel(pHome, pDraw, pAway),
-        model: "poisson-form-v1",
+        model: "poisson-dc-v2",
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
       });
       written++;
@@ -260,7 +306,7 @@ async function run() {
 
         const lambdaHome = leagueAvgGoals * home.attack * away.defense * HOME_ADVANTAGE;
         const lambdaAway = leagueAvgGoals * away.attack * home.defense;
-        const { pHome, pDraw, pAway } = matchProbabilities(lambdaHome, lambdaAway);
+        const { pHome, pDraw, pAway, pOver25, pUnder25 } = matchProbabilities(lambdaHome, lambdaAway);
 
         const docId = `fd-${m.id}`;
         const ref = db.collection("matches").doc(docId);
@@ -274,8 +320,10 @@ async function run() {
           home_win_prob: Math.round(pHome * 100),
           draw_prob: Math.round(pDraw * 100),
           away_win_prob: Math.round(pAway * 100),
+          over_2_5_prob: Math.round(pOver25 * 100),
+          under_2_5_prob: Math.round(pUnder25 * 100),
           confidence: confidenceLabel(pHome, pDraw, pAway),
-          model: "poisson-form-v1",
+          model: "poisson-dc-v2",
           updated_at: admin.firestore.FieldValue.serverTimestamp(),
         });
         written++;

@@ -102,6 +102,17 @@ function renderHistoryTable(el, matches, nearestUpcoming) {
     const badge = m.hit
       ? '<span class="status-badge hit">✓ İsabet</span>'
       : '<span class="status-badge miss">✕ İsabetsiz</span>';
+    const hasOu = m.predicted_ou != null;
+    const ouBadge = hasOu
+      ? (m.ou_hit
+          ? '<span class="status-badge hit">✓ Gol</span>'
+          : '<span class="status-badge miss">✕ Gol</span>')
+      : '';
+    const ouLabel = function (code) { return code === 'OVER' ? '2.5 Üst' : '2.5 Alt'; };
+    const ouDetail = hasOu
+      ? '<div class="hrow-meta" style="margin-top:6px;">Toplam gol tahminimiz: ' + ouLabel(m.predicted_ou) +
+        ' (' + m.actual_total_goals + ' gol oynandı, gerçekleşen: ' + ouLabel(m.actual_ou) + ')</div>'
+      : '';
 
     row.innerHTML =
       '<div class="hrow-head">' +
@@ -109,7 +120,7 @@ function renderHistoryTable(el, matches, nearestUpcoming) {
           '<div class="hrow-date">' + formatDateLong(m.match_date) + ' · ' + escapeHtml(m.competition_name) + '</div>' +
           '<div class="hrow-match">' + escapeHtml(m.home_team) + ' ' + m.actual_home_goals + '-' + m.actual_away_goals + ' ' + escapeHtml(m.away_team) + '</div>' +
         '</div>' +
-        badge +
+        '<div style="display:flex;gap:6px;flex-shrink:0;">' + badge + ouBadge + '</div>' +
       '</div>' +
       '<div class="hrow-detail">' +
         '<div class="prob-grid">' +
@@ -119,6 +130,7 @@ function renderHistoryTable(el, matches, nearestUpcoming) {
         '</div>' +
         '<div class="hrow-meta">Tahminimiz: ' + outcomeLabel(m.predicted_result, m.home_team, m.away_team) +
           ' · Gerçekleşen: ' + outcomeLabel(m.actual_result, m.home_team, m.away_team) + '</div>' +
+        ouDetail +
       '</div>';
 
     row.addEventListener('click', function () { row.classList.toggle('open'); });

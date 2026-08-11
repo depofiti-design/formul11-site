@@ -31,6 +31,13 @@ function renderMatches(el, matches, emptyMessage) {
   matches.forEach(function (m) {
     const row = document.createElement('div');
     row.className = 'trow';
+    const ouRow = (m.over_2_5_prob != null && m.under_2_5_prob != null)
+      ? '<div class="trow-sublabel">Toplam gol (2.5 sınırı)</div>' +
+        '<div class="prob-grid">' +
+          '<div class="prob-item"><b>%' + m.over_2_5_prob + '</b><span>2.5 Üst</span></div>' +
+          '<div class="prob-item"><b>%' + m.under_2_5_prob + '</b><span>2.5 Alt</span></div>' +
+        '</div>'
+      : '';
     row.innerHTML =
       '<div class="trow-head">' +
         '<div><div class="tag">' + m.competition_name + '</div>' + m.home_team + ' vs ' + m.away_team + '</div>' +
@@ -42,6 +49,7 @@ function renderMatches(el, matches, emptyMessage) {
           '<div class="prob-item"><b>%' + m.draw_prob + '</b><span>Beraberlik</span></div>' +
           '<div class="prob-item"><b>%' + m.away_win_prob + '</b><span>' + m.away_team + '</span></div>' +
         '</div>' +
+        ouRow +
         '<div class="trow-meta">' + formatMatchDate(m.match_date) + ' · İstatistiksel tahmindir, garanti değildir.</div>' +
       '</div>';
     row.addEventListener('click', function () { row.classList.toggle('open'); });

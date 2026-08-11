@@ -58,6 +58,19 @@ function actualResult(homeGoals, awayGoals) {
   return "D";
 }
 
+// over_2_5_prob/under_2_5_prob 6 Ağustos'taki predict.js güncellemesiyle
+// eklendi — daha eski maç dokümanlarında bu alanlar yok, o yüzden burada
+// hep null kontrolü yapılıyor (eski maçlar 1-X-2 için değerlendirilmeye
+// devam eder, sadece alt/üst kısmı atlanır).
+function predictedOverUnder(m) {
+  if (m.over_2_5_prob == null || m.under_2_5_prob == null) return null;
+  return m.over_2_5_prob >= m.under_2_5_prob ? "OVER" : "UNDER";
+}
+
+function actualOverUnder(totalGoals) {
+  return totalGoals > 2.5 ? "OVER" : "UNDER";
+}
+
 async function evaluateFootballData(doc) {
   const id = doc.id.replace(/^fd-/, "");
   const data = await fdGet(`/matches/${id}`);
@@ -125,16 +138,29 @@ async function run() {
       const hit = predicted === actual;
       if (hit) hits++;
 
-      batch.update(item.ref, {
+      const totalGoals = score.homeGoals + score.awayGoals;
+      const ouPredicted = predictedOverUnder(item.data);
+      const ouActual = actualOverUnder(totalGoals);
+      const ouHit = ouPredicted ? ouPredicted === ouActual : null;
+
+      const update = {
         status: "finished",
         actual_home_goals: score.homeGoals,
         actual_away_goals: score.awayGoals,
+        actual_total_goals: totalGoals,
         actual_result: actual,
         predicted_result: predicted,
         hit,
+        actual_ou: ouActual,
         evaluated: true,
         evaluated_at: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      if (ouPredicted) {
+        update.predicted_ou = ouPredicted;
+        update.ou_hit = ouHit;
+      }
+
+      batch.update(item.ref, update);
       evaluated++;
       await sleep(item.id.startsWith("fd-") ? 6500 : 1500);
     } catch (err) {
