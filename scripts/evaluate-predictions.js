@@ -2,7 +2,7 @@
 // Günde bir kez (predict.js'den hemen sonra, aynı cron) çalışır:
 //  1) Firestore "matches" koleksiyonundaki, tarihi geçmiş ama henüz
 //     değerlendirilmemiş (evaluated != true) dokümanları bulur
-//  2) Kaynağına göre (football-data.org / TheSportsDB) gerçek skoru çeker
+//  2) football-data.org'dan gerçek skoru çeker
 //  3) Maç bittiyse tahmin edilen sonuç (en yüksek olasılıklı 1-X-2) ile
 //     gerçek sonucu karşılaştırıp isabet/isabetsiz olarak işaretler
 //
@@ -19,7 +19,6 @@ if (!API_KEY) {
 }
 
 const BASE_URL = "https://api.football-data.org/v4";
-const TSD_BASE = "https://www.thesportsdb.com/api/v1/json/3";
 const MAX_PER_RUN = 50; // ücretsiz plan hızını korumak için tek çalıştırmada üst sınır
 
 function sleep(ms) {
@@ -35,12 +34,6 @@ async function fdGet(path) {
     await sleep(60_000);
     return fdGet(path);
   }
-  if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
-  return res.json();
-}
-
-async function tsdGet(path) {
-  const res = await fetch(`${TSD_BASE}${path}`);
   if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
   return res.json();
 }
@@ -81,17 +74,6 @@ async function evaluateFootballData(doc) {
   return { homeGoals: home, awayGoals: away };
 }
 
-async function evaluateThesportsdb(doc) {
-  const id = doc.id.replace(/^tsd-/, "");
-  const data = await tsdGet(`/lookupevent.php?id=${id}`);
-  const ev = (data.events || [])[0];
-  if (!ev) return null;
-  const home = ev.intHomeScore;
-  const away = ev.intAwayScore;
-  if (home == null || away == null) return null;
-  return { homeGoals: Number(home), awayGoals: Number(away) };
-}
-
 function loadServiceAccount() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
@@ -123,13 +105,11 @@ async function run() {
 
   for (const item of pending.slice(0, MAX_PER_RUN)) {
     try {
-      const score = item.id.startsWith("fd-")
-        ? await evaluateFootballData(item)
-        : await evaluateThesportsdb(item);
+      const score = await evaluateFootballData(item);
 
       if (!score) {
         skipped++;
-        await sleep(item.id.startsWith("fd-") ? 6500 : 1500);
+        await sleep(6500);
         continue;
       }
 
@@ -162,7 +142,7 @@ async function run() {
 
       batch.update(item.ref, update);
       evaluated++;
-      await sleep(item.id.startsWith("fd-") ? 6500 : 1500);
+      await sleep(6500);
     } catch (err) {
       console.error(`${item.id} değerlendirilirken hata:`, err.message);
       skipped++;

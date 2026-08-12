@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getFirestore, collection, query, where, orderBy, limit, getDocs, getCountFromServer, addDoc, Timestamp, doc, getDoc
+  getFirestore, collection, query, orderBy, limit, getDocs, getCountFromServer, addDoc, Timestamp, doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -71,22 +71,11 @@ async function loadGenel(el) {
   const soonestByComp = new Map();
   snap.forEach(function (doc) {
     const m = doc.data();
-    if (m.competition_code === 'TSL') return;
     if (!soonestByComp.has(m.competition_code)) soonestByComp.set(m.competition_code, m); // sorgu tarihe göre artan, ilk görülen = en yakın
   });
   const matches = Array.from(soonestByComp.values())
     .sort(function (a, b) { return a.match_date.toMillis() - b.match_date.toMillis(); });
   renderMatches(el, matches, 'Henüz analiz eklenmedi, ilk otomatik güncelleme yakında çalışacak.');
-}
-
-async function loadTurkiye(el) {
-  const matchesRef = collection(db, 'matches');
-  const q = query(matchesRef, where('competition_code', '==', 'TSL'), limit(30));
-  const snap = await getDocs(q);
-  const matches = [];
-  snap.forEach(function (doc) { matches.push(doc.data()); });
-  matches.sort(function (a, b) { return a.match_date.toMillis() - b.match_date.toMillis(); });
-  renderMatches(el, matches.slice(0, 8), 'Şu an listelenecek Süper Lig maçı yok, yakında daha fazla eklenecek.');
 }
 
 async function loadAnalizler() {
@@ -99,21 +88,6 @@ async function loadAnalizler() {
     console.error('Analizler yüklenemedi:', err);
     el.innerHTML = '<div class="trow"><div>Analizler şu an yüklenemedi, daha sonra tekrar dene.</div></div>';
   }
-
-  document.querySelectorAll('.tab-btn').forEach(function (btn) {
-    btn.addEventListener('click', async function () {
-      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
-      btn.classList.add('active');
-      el.innerHTML = '<div class="trow"><div>Analizler yükleniyor…</div></div>';
-      try {
-        if (btn.getAttribute('data-tab') === 'turkiye') await loadTurkiye(el);
-        else await loadGenel(el);
-      } catch (err) {
-        console.error('Analizler yüklenemedi:', err);
-        el.innerHTML = '<div class="trow"><div>Analizler şu an yüklenemedi, daha sonra tekrar dene.</div></div>';
-      }
-    });
-  });
 }
 
 async function loadMatchCount() {
