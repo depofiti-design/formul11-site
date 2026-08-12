@@ -57,13 +57,13 @@ function renderMatches(el, matches, emptyMessage) {
   });
 }
 
-// Sabit lig sırası: "Genel" sekmesi her ligden en yakın maçı gösterir, sadece
-// tarihe göre en yakın maçları almaz. Aksi halde takvimi erken başlayan ligler
-// (ör. Brasileirão) diğerlerini (ör. Serie A, sezonu 22 Ağustos'ta başlıyor)
-// önizlemeden tamamen dışarıda bırakabiliyordu — her lig kalıcı olarak görünür
-// kalsın diye bu şekilde düzeltildi.
-var COMPETITION_ORDER = ['PL', 'PD', 'BL1', 'SA', 'FL1', 'DED', 'PPL', 'ELC', 'BSA'];
-
+// "Genel" sekmesi her ligden en yakın maçı garanti eder — aksi halde takvimi
+// geç başlayan ligler (ör. Serie A, sezonu 22 Ağustos'ta başlıyor) tarihe göre
+// sıralamada hep en altta kalıp önizlemeden tamamen dışarıda kalabiliyordu.
+// AMA gösterim sırası sabit lig adı değil, gerçek maç tarihi — yoksa (önceki
+// haliyle) 9 gün sonraki bir Premier Lig maçı, 2-3 gün içindeki 5 farklı ligin
+// maçının önüne geçip sayfayı "güncel değil" gösterebiliyordu. Her lig temsil
+// ediliyor ama en yakın/en güncel maçlar hep başta.
 async function loadGenel(el) {
   const matchesRef = collection(db, 'matches');
   const q = query(matchesRef, orderBy('match_date', 'asc'), limit(150));
@@ -74,9 +74,8 @@ async function loadGenel(el) {
     if (m.competition_code === 'TSL') return;
     if (!soonestByComp.has(m.competition_code)) soonestByComp.set(m.competition_code, m); // sorgu tarihe göre artan, ilk görülen = en yakın
   });
-  const matches = COMPETITION_ORDER
-    .map(function (code) { return soonestByComp.get(code); })
-    .filter(Boolean);
+  const matches = Array.from(soonestByComp.values())
+    .sort(function (a, b) { return a.match_date.toMillis() - b.match_date.toMillis(); });
   renderMatches(el, matches, 'Henüz analiz eklenmedi, ilk otomatik güncelleme yakında çalışacak.');
 }
 
