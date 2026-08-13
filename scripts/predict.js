@@ -32,6 +32,18 @@ const COMPETITIONS = [
   { code: "BSA", name: "Brasileirão" },
 ];
 
+// Kıtasal kupalar: standings/puan durumu yok (grup aşaması bitmiş olabilir,
+// eleme usulü oynanıyor olabilir), o yüzden ayrı ele alınıyor — her iki takım
+// da yukarıdaki 9 ligden birinde zaten takip ediliyorsa (aynı football-data.org
+// takım ID sistemi ligler arasında ortak) o ligin form verisiyle tahmin
+// üretiliyor, değilse (çoğu maç — rakip başka bir ülkenin liginden) sessizce
+// atlanıyor. football-data.org'da yeni kayıt/ek maliyet gerektirmiyor, zaten
+// kullandığımız plana dahil.
+const CONTINENTAL_CUPS = [
+  { code: "CLI", name: "Copa Libertadores" },
+  { code: "CL", name: "UEFA Şampiyonlar Ligi" },
+];
+
 const BASE_URL = "https://api.football-data.org/v4";
 const HOME_ADVANTAGE = 1.12;
 const MAX_GOALS = 6; // Poisson toplamı için pratik üst sınır
@@ -160,6 +172,7 @@ async function run() {
 
   const batch = db.batch();
   let written = 0;
+  const globalStrengths = {}; // team id -> {name, attack, defense, leagueAvgGoals} — kıtasal kupalar için de kullanılacak
 
   for (const comp of COMPETITIONS) {
     try {
@@ -197,6 +210,9 @@ async function run() {
         goalsAgainst: t.goalsAgainst,
       }));
       const { strengths, leagueAvgGoals } = buildTeamStrengths(teamRows);
+      for (const teamId of Object.keys(strengths)) {
+        globalStrengths[teamId] = { ...strengths[teamId], leagueAvgGoals };
+      }
 
       await sleep(6500); // ücretsiz plan: 10 istek/dk sınırı
 
@@ -240,12 +256,63 @@ async function run() {
     }
   }
 
+  written += await runContinentalCups(db, batch, globalStrengths);
+
   if (written > 0) {
     await batch.commit();
     console.log(`${written} maç tahmini Firestore'a yazıldı.`);
   } else {
     console.log("Yazılacak yeni maç bulunamadı.");
   }
+}
+
+async function runContinentalCups(db, batch, globalStrengths) {
+  let written = 0;
+  for (const comp of CONTINENTAL_CUPS) {
+    try {
+      console.log(`-> ${comp.name} (${comp.code}) yaklaşan maçlar çekiliyor...`);
+      const matchesRes = await apiGet(`/competitions/${comp.code}/matches?status=SCHEDULED`);
+      const upcoming = (matchesRes.matches || [])
+        .filter((m) => m.homeTeam?.id && m.awayTeam?.id)
+        .slice(0, 15);
+
+      for (const m of upcoming) {
+        const home = globalStrengths[m.homeTeam.id];
+        const away = globalStrengths[m.awayTeam.id];
+        if (!home || !away) continue; // takımlardan biri takip ettiğimiz 9 ligin dışından
+
+        // İki takım farklı liglerden gelebilir (ör. Brezilya-Arjantin), o
+        // yüzden tek bir "leagueAvgGoals" yok — ikisinin ortalaması alınıyor.
+        const avgGoals = (home.leagueAvgGoals + away.leagueAvgGoals) / 2;
+        const lambdaHome = avgGoals * home.attack * away.defense * HOME_ADVANTAGE;
+        const lambdaAway = avgGoals * away.attack * home.defense;
+        const { pHome, pDraw, pAway, pOver25, pUnder25 } = matchProbabilities(lambdaHome, lambdaAway);
+
+        const ref = db.collection("matches").doc(`fd-${m.id}`);
+        batch.set(ref, {
+          source: "football-data.org",
+          competition_code: comp.code,
+          competition_name: comp.name,
+          home_team: m.homeTeam.name,
+          away_team: m.awayTeam.name,
+          match_date: admin.firestore.Timestamp.fromDate(new Date(m.utcDate)),
+          home_win_prob: Math.round(pHome * 100),
+          draw_prob: Math.round(pDraw * 100),
+          away_win_prob: Math.round(pAway * 100),
+          over_2_5_prob: Math.round(pOver25 * 100),
+          under_2_5_prob: Math.round(pUnder25 * 100),
+          confidence: confidenceLabel(pHome, pDraw, pAway),
+          model: "poisson-dc-v2",
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        written++;
+      }
+      await sleep(6500);
+    } catch (err) {
+      console.error(`${comp.code} işlenirken hata:`, err.message);
+    }
+  }
+  return written;
 }
 
 run().catch((err) => {
