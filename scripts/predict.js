@@ -68,6 +68,14 @@ async function apiGet(path) {
 }
 
 function poissonPmf(k, lambda) {
+  // lambda tam 0 olursa (ör. bir takım sezonun ilk maçında 0 gol atmış/yemiş
+  // ve o istatistik doğrudan beklenen gol ortalamasına giriyor) Math.log(0)
+  // -Infinity veriyor, k=0 için 0 * -Infinity = NaN oluyor ve tüm olasılık
+  // hesabını (1-X-2 + alt/üst) NaN'a çeviriyor. Küçük bir taban değer
+  // (epsilon) hem NaN'ı önlüyor hem de istatistiksel olarak daha doğru —
+  // tek maçlık örneklemden "bu takım asla gol atmaz/yemez" sonucu çıkarmak
+  // aşırı iddialı olurdu.
+  lambda = Math.max(lambda, 1e-6);
   let logP = -lambda + k * Math.log(lambda);
   for (let i = 2; i <= k; i++) logP -= Math.log(i);
   return Math.exp(logP);

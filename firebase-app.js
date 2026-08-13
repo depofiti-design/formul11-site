@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getFirestore, collection, query, orderBy, limit, getDocs, getCountFromServer, addDoc, Timestamp, doc, getDoc
+  getFirestore, collection, query, where, orderBy, limit, getDocs, getCountFromServer, addDoc, Timestamp, doc, getDoc
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -66,7 +66,12 @@ function renderMatches(el, matches, emptyMessage) {
 // ediliyor ama en yakın/en güncel maçlar hep başta.
 async function loadGenel(el) {
   const matchesRef = collection(db, 'matches');
-  const q = query(matchesRef, orderBy('match_date', 'asc'), limit(150));
+  // match_date >= şu an: aksi halde (aynı alanda where+orderBy, composite
+  // index gerekmiyor) sonuçlanmış eski maçlar da sorguya girip "en eski
+  // tarihli kayıt" olarak sahte biçimde güncel gösterilebiliyordu — site
+  // yeniyken (hiç sonuçlanmış maç yokken) bu görünmüyordu, geçmiş veri
+  // birikince ortaya çıktı.
+  const q = query(matchesRef, where('match_date', '>=', Timestamp.now()), orderBy('match_date', 'asc'), limit(150));
   const snap = await getDocs(q);
   const soonestByComp = new Map();
   snap.forEach(function (doc) {
