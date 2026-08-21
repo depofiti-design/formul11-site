@@ -64,10 +64,21 @@ function actualOverUnder(totalGoals) {
   return totalGoals > 2.5 ? "OVER" : "UNDER";
 }
 
-async function evaluateFootballData(doc) {
+// `data.status === "FINISHED"` kontrolüne GÜVENME — football-data.org'un
+// status alanı güvenilmez çıktı: bazen bozuk bir string geliyor (bkz.
+// fetchUpcomingMatches'teki not), bazen de maç gerçekten bitmiş, tam skor
+// hazır olduğu halde status hâlâ "IN_PLAY" kalıyor (21 Ağustos'ta
+// Marseille-Strasbourg'da görüldü — skor 3-0 hazırdı ama status "IN_PLAY"
+// dediği için maç günlerce "değerlendirme bekliyor" listesinde sıkışıp
+// sessizce atlanmaya devam etti). Bunun yerine doğrudan skorun varlığına
+// bakılıyor; maçın gerçekten bitmiş olmasını garanti etmek için de kickoff
+// üzerinden en az 2.5 saat geçmiş olması isteniyor (canlı/geçici bir skorun
+// erken güvenilmesini önlemek için).
+async function evaluateFootballData(doc, matchDateMillis) {
+  const hoursElapsed = (Date.now() - matchDateMillis) / 3600000;
+  if (hoursElapsed < 2.5) return null;
   const id = doc.id.replace(/^fd-/, "");
   const data = await fdGet(`/matches/${id}`);
-  if (data.status !== "FINISHED") return null;
   const home = data.score?.fullTime?.home;
   const away = data.score?.fullTime?.away;
   if (home == null || away == null) return null;
@@ -105,7 +116,7 @@ async function run() {
 
   for (const item of pending.slice(0, MAX_PER_RUN)) {
     try {
-      const score = await evaluateFootballData(item);
+      const score = await evaluateFootballData(item, item.data.match_date.toMillis());
 
       if (!score) {
         skipped++;
