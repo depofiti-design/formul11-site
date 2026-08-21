@@ -44,6 +44,8 @@
   .tile-delta{font-size:13px;font-weight:700;margin-top:6px;}
   .tile-delta.pos{color:var(--good);}
   .tile-delta.neutral{color:var(--muted);}
+  .baseline-note{font-size:13.5px;color:var(--muted);background:var(--accent-soft);border-radius:12px;padding:14px 18px;margin:20px 0 8px;line-height:1.55;}
+  .baseline-note b{color:var(--text);}
 
   .meter-wrap{display:flex;justify-content:center;margin-bottom:2px;}
   .meter-pct{font-size:26px;font-weight:800;fill:var(--text);}
@@ -59,6 +61,9 @@
   .baseline{position:absolute;top:-4px;bottom:-4px;left:33%;border-left:1px dashed var(--muted);}
   .baseline-tag{position:absolute;top:-18px;left:33%;transform:translateX(-50%);font-size:10.5px;color:var(--muted);white-space:nowrap;}
   .bar-chart-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 22px 20px;position:relative;margin-top:22px;}
+  .bar-row-empty .bar-label{color:var(--muted);font-weight:600;}
+  .bar-track-empty{background:var(--bg);border:1px dashed var(--border);display:flex;align-items:center;padding-left:10px;}
+  .bar-empty-label{font-size:12px;color:var(--muted);font-style:italic;}
 
   /* --- history table --- */
   .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:8px;}
@@ -140,8 +145,10 @@
     </div>
   </div>
 
+  <p class="baseline-note"><b>"Rastgele %33" ne demek?</b> Bir maçın 3 olası sonucu var: ev sahibi kazanır, berabere biter, deplasman kazanır. Hiç analiz yapmadan bunlardan birini rastgele seçsen, ortalama %33'ünü tutturursun. Bizim isabet oranımız bunun üstündeyse model gerçekten faydalı demektir; altındaysa rastgele seçmekten farkı yok demektir.</p>
+
   <h2>Lig bazında isabet oranı</h2>
-  <p class="section-sub">Her lig için, o ligde verdiğimiz tahminlerin ne kadarı gerçek sonuçla uyuştu. Kesikli çizgi, üç ihtimalden birini rastgele seçmenin (%33) referans çizgisidir.</p>
+  <p class="section-sub">Takip ettiğimiz 9 büyük ligin hepsi burada listelenir. Bir ligin maçı henüz sonuçlanmadıysa (ör. sezonu yeni başladıysa) "henüz veri yok" yazar — kapsam dışı olduğundan değil, henüz sonuç birikmediğinden. Kesikli çizgi, üç ihtimalden birini rastgele seçmenin (%33) referans çizgisidir.</p>
   <div id="barChartArea"></div>
 
   <h2 style="margin-top:44px;">Tüm geçmiş tahminler</h2>

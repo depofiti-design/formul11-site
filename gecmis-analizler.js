@@ -48,15 +48,39 @@ function renderMeter(el, rate, hasData) {
     '</svg>';
 }
 
-function renderBarChart(el, groups, nearestUpcoming) {
-  if (groups.length === 0) {
-    const hint = nearestUpcoming
-      ? ' İlk tahminlerimiz ' + formatDateShort(nearestUpcoming) + ' itibariyle sonuçlanmaya başlayacak.'
-      : '';
-    el.innerHTML = emptyCardHtml('<b>Henüz lig bazında veri yok.</b><br>' + 'Tahminlerimiz sonuçlandıkça burada lig lig isabet oranı görünecek.' + hint);
-    return;
-  }
-  const rows = groups.map(function (g) {
+// Takip ettiğimiz 9 büyük lig — sabit liste. Bar grafik SADECE veri
+// biriken ligleri göstermek yerine hepsini gösterir (veri yoksa "henüz
+// veri yok" ile) — yoksa ana sayfadaki "9 Büyük Lig" iddiasıyla bu
+// sayfadaki (o an sonuçlanmış maçı olmayan ligleri sessizce atlayan)
+// liste birbirini tutmuyormuş gibi görünüyordu (kullanıcı fark etti).
+var TRACKED_LEAGUES = [
+  { code: 'PL', name: 'Premier Lig' },
+  { code: 'PD', name: 'La Liga' },
+  { code: 'BL1', name: 'Bundesliga' },
+  { code: 'SA', name: 'Serie A' },
+  { code: 'FL1', name: 'Ligue 1' },
+  { code: 'DED', name: 'Eredivisie' },
+  { code: 'PPL', name: 'Primeira Liga' },
+  { code: 'ELC', name: 'Championship' },
+  { code: 'BSA', name: 'Brasileirão' }
+];
+
+function renderBarChart(el, groupsByCode) {
+  const withData = [];
+  const withoutData = [];
+  TRACKED_LEAGUES.forEach(function (league) {
+    const g = groupsByCode.get(league.code);
+    if (g) withData.push(g);
+    else withoutData.push({ name: league.name, total: 0, rate: null });
+  });
+  // Ekstra takip edilen turnuvalar (ör. kıtasal kupalar) — sabit 9 lig
+  // dışında ama veri varsa göster.
+  groupsByCode.forEach(function (g, code) {
+    if (!TRACKED_LEAGUES.some(function (l) { return l.code === code; })) withData.push(g);
+  });
+  withData.sort(function (a, b) { return b.rate - a.rate || b.total - a.total; });
+
+  const dataRows = withData.map(function (g) {
     return (
       '<div class="bar-row">' +
         '<div class="bar-label">' + escapeHtml(g.name) + ' <span class="bar-n">(' + g.total + ' maç)</span></div>' +
@@ -68,7 +92,15 @@ function renderBarChart(el, groups, nearestUpcoming) {
       '</div>'
     );
   }).join('');
-  el.innerHTML = '<div class="bar-chart-card"><div class="bar-list">' + rows + '</div></div>';
+  const emptyRows = withoutData.map(function (g) {
+    return (
+      '<div class="bar-row bar-row-empty">' +
+        '<div class="bar-label">' + escapeHtml(g.name) + '</div>' +
+        '<div class="bar-track bar-track-empty"><span class="bar-empty-label">henüz veri yok</span></div>' +
+      '</div>'
+    );
+  }).join('');
+  el.innerHTML = '<div class="bar-chart-card"><div class="bar-list">' + dataRows + emptyRows + '</div></div>';
 }
 
 function outcomeLabel(code, homeTeam, awayTeam) {
@@ -182,12 +214,9 @@ async function loadHistory() {
     g.total++;
     if (m.hit) g.hits++;
   });
-  const groups = Array.from(groupMap.values()).map(function (g) {
-    return Object.assign({}, g, { rate: Math.round((g.hits / g.total) * 100) });
-  });
-  groups.sort(function (a, b) { return b.rate - a.rate || b.total - a.total; });
+  groupMap.forEach(function (g) { g.rate = Math.round((g.hits / g.total) * 100); });
 
-  renderBarChart(document.getElementById('barChartArea'), groups, nearestUpcoming);
+  renderBarChart(document.getElementById('barChartArea'), groupMap);
   renderHistoryTable(document.getElementById('historyTable'), evaluated, nearestUpcoming);
 }
 
