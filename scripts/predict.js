@@ -73,6 +73,25 @@ async function fetchFinishedMatches(code, seasonYear) {
   return res.matches || [];
 }
 
+// `status=SCHEDULED` filtresi yerine tarih aralığı kullanıyor. Sebep:
+// football-data.org'da bazı liglerde (13 Ağustos'ta Championship, Ligue 1,
+// Primeira Liga'da tespit edildi) bir kısım maçın `status` alanı bozuk
+// geliyor (ör. "SCHEDULED" yerine ham bir tarih string'i) — bu maçlar
+// `status=SCHEDULED` sorgusuna hiç düşmüyor ve sessizce hiç güncellenmiyor.
+// Tarih aralığı + "skor henüz girilmemiş" kontrolü bu veri kalitesi
+// sorununa bağımlı değil.
+async function fetchUpcomingMatches(code) {
+  const from = new Date();
+  const to = new Date(from.getTime() + 45 * 86400000); // 45 gün ileri
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const res = await apiGet(`/competitions/${code}/matches?dateFrom=${fmt(from)}&dateTo=${fmt(to)}`);
+  const matches = (res.matches || []).filter(
+    (m) => m.score?.fullTime?.home == null && m.score?.fullTime?.away == null
+  );
+  matches.sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+  return matches;
+}
+
 function poissonPmf(k, lambda) {
   // lambda tam 0 olursa (ör. bir takım sezonun ilk maçında 0 gol atmış/yemiş
   // ve o istatistik doğrudan beklenen gol ortalamasına giriyor) Math.log(0)
@@ -260,8 +279,7 @@ async function run() {
       await sleep(6500); // ücretsiz plan: 10 istek/dk sınırı
 
       console.log(`-> ${comp.name} yaklaşan maçlar çekiliyor...`);
-      const matchesRes = await apiGet(`/competitions/${comp.code}/matches?status=SCHEDULED`);
-      const upcoming = (matchesRes.matches || []).slice(0, 10);
+      const upcoming = (await fetchUpcomingMatches(comp.code)).slice(0, 10);
 
       for (const m of upcoming) {
         const home = strengths[m.homeTeam.id];
@@ -314,8 +332,7 @@ async function runContinentalCups(db, batch, globalStrengths) {
   for (const comp of CONTINENTAL_CUPS) {
     try {
       console.log(`-> ${comp.name} (${comp.code}) yaklaşan maçlar çekiliyor...`);
-      const matchesRes = await apiGet(`/competitions/${comp.code}/matches?status=SCHEDULED`);
-      const upcoming = (matchesRes.matches || [])
+      const upcoming = (await fetchUpcomingMatches(comp.code))
         .filter((m) => m.homeTeam?.id && m.awayTeam?.id)
         .slice(0, 15);
 
