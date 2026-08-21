@@ -67,6 +67,12 @@ async function apiGet(path) {
   return res.json();
 }
 
+async function fetchFinishedMatches(code, seasonYear) {
+  const q = seasonYear ? `?status=FINISHED&season=${seasonYear}` : `?status=FINISHED`;
+  const res = await apiGet(`/competitions/${code}/matches${q}`);
+  return res.matches || [];
+}
+
 function poissonPmf(k, lambda) {
   // lambda tam 0 olursa (ör. bir takım sezonun ilk maçında 0 gol atmış/yemiş
   // ve o istatistik doğrudan beklenen gol ortalamasına giriyor) Math.log(0)
@@ -140,21 +146,65 @@ function matchProbabilities(lambdaHome, lambdaAway) {
   return { pHome, pDraw, pAway, pOver25, pUnder25: 1 - pOver25 };
 }
 
-// Normalize edilmiş { id, goalsFor, goalsAgainst, played } listesinden
-// takım hücum/savunma katsayıları çıkarır. Hem football-data.org hem
-// TheSportsDB kaynaklı veri bu ortak formata çevrilip buraya veriliyor.
-function buildTeamStrengths(teamRows) {
-  const teams = teamRows.filter((t) => t.played > 0);
-  const leagueAvgGoals =
-    teams.reduce((s, t) => s + t.goalsFor / t.played, 0) / teams.length;
+// Bir takımın "son form"unu değerlendirirken kaç maçına bakılacağı — sezon
+// başından beri biriken TÜM maçların düz ortalaması yerine (eski yöntem),
+// son RECENT_FORM_GAMES maça bakmak güncel formu (sakatlık, teknik direktör
+// değişikliği, moral vb.) çok daha iyi yansıtıyor. Futbol analitiğinde
+// bilinen, standart bir iyileştirme.
+const RECENT_FORM_GAMES = 8;
+
+// Az maçlı takımların (ör. sezonun ilk haftalarında) katsayısını lig
+// ortalamasına doğru "büzen" (shrinkage) Bayesyen ağırlık — K kadar
+// "hayali ortalama maç" varmış gibi davranır. Maç sayısı arttıkça takımın
+// gerçek formu ağır basar. Bu olmadan 1-2 maçlık şanslı/şanssız bir seri
+// aşırı iddialı (overconfident) bir tahmine yol açabiliyordu.
+const SHRINKAGE_PRIOR_GAMES = 5;
+
+// Bitmiş maç listesinden (her maç: homeTeam/awayTeam/score.fullTime) takım
+// başına son-form hücum/savunma katsayıları çıkarır. Eskiden sezon
+// standings'inin TOTAL satırındaki düz ortalama kullanılıyordu — bu hem
+// erken sezonda ekstra bir API çağrısı (standings) gerektiriyordu hem de
+// güncel formu değil tüm sezonu yansıtıyordu.
+function buildTeamStrengthsFromMatches(matches) {
+  const byTeam = new Map(); // teamId -> { name, games: [{scored, conceded, date}] }
+  for (const m of matches) {
+    const hg = m.score?.fullTime?.home;
+    const ag = m.score?.fullTime?.away;
+    const home = m.homeTeam, away = m.awayTeam;
+    if (hg == null || ag == null || !home?.id || !away?.id) continue;
+    if (!byTeam.has(home.id)) byTeam.set(home.id, { name: home.name, games: [] });
+    if (!byTeam.has(away.id)) byTeam.set(away.id, { name: away.name, games: [] });
+    byTeam.get(home.id).games.push({ scored: hg, conceded: ag, date: m.utcDate });
+    byTeam.get(away.id).games.push({ scored: ag, conceded: hg, date: m.utcDate });
+  }
+
+  // Her takımın son N maçını seç, lig ortalamasını bu pencerelerin
+  // üzerinden hesapla (tutarlılık için — attack/defense de aynı pencereye
+  // göre normalize edilecek).
+  const recentByTeam = new Map();
+  let totalGoals = 0, totalGames = 0;
+  for (const [id, t] of byTeam) {
+    const recent = [...t.games]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, RECENT_FORM_GAMES);
+    recentByTeam.set(id, { name: t.name, games: recent });
+    totalGoals += recent.reduce((s, g) => s + g.scored, 0);
+    totalGames += recent.length;
+  }
+  if (totalGames === 0) return { strengths: {}, leagueAvgGoals: 0 };
+  const leagueAvgGoals = totalGoals / totalGames;
 
   const strengths = {};
-  for (const t of teams) {
-    strengths[t.id] = {
-      name: t.name,
-      attack: t.goalsFor / t.played / leagueAvgGoals,
-      defense: t.goalsAgainst / t.played / leagueAvgGoals,
-    };
+  for (const [id, t] of recentByTeam) {
+    const played = t.games.length;
+    if (played === 0) continue;
+    const avgScored = t.games.reduce((s, g) => s + g.scored, 0) / played;
+    const avgConceded = t.games.reduce((s, g) => s + g.conceded, 0) / played;
+    const K = SHRINKAGE_PRIOR_GAMES;
+    // Bayesyen büzülme: (gözlem × played + lig_ortalaması(=1.0) × K) / (played + K)
+    const attack = (played * (avgScored / leagueAvgGoals) + K * 1.0) / (played + K);
+    const defense = (played * (avgConceded / leagueAvgGoals) + K * 1.0) / (played + K);
+    strengths[id] = { name: t.name, attack, defense };
   }
   return { strengths, leagueAvgGoals };
 }
@@ -184,40 +234,25 @@ async function run() {
 
   for (const comp of COMPETITIONS) {
     try {
-      console.log(`-> ${comp.name} (${comp.code}) puan durumu çekiliyor...`);
-      const standingsRes = await apiGet(`/competitions/${comp.code}/standings`);
-      let table = standingsRes.standings?.find((s) => s.type === "TOTAL")?.table || [];
+      console.log(`-> ${comp.name} (${comp.code}) sonuçlanan maçlar çekiliyor...`);
+      let finished = await fetchFinishedMatches(comp.code);
 
-      // football-data.org "current season" bazen yeni sezona geçmiş oluyor
-      // (henüz hiç maç oynanmamış, herkes 0 puan/0 maç). Bu durumda takım
-      // güçlerini hesaplayacak veri kalmıyor ve her maç sessizce atlanıyor
-      // (Serie A/Ligue 1/Eredivisie/Championship'te tam bu yüzden hiç yazı
-      // çıkmıyordu). Çözüm: bir önceki (tamamlanmış) sezona düş.
-      const hasPlayedData = table.some((t) => t.playedGames > 0);
-      if (table.length > 0 && !hasPlayedData) {
-        const seasonStartYear = standingsRes.season?.startDate
-          ? new Date(standingsRes.season.startDate).getUTCFullYear()
-          : new Date().getUTCFullYear();
-        const prevYear = seasonStartYear - 1;
-        console.log(`${comp.name}: yeni sezon henüz oynanmadı, ${prevYear} sezonuna düşülüyor...`);
+      // Sezon henüz başlamadıysa (ör. yaz arası, 0 bitmiş maç) bir önceki
+      // tamamlanmış sezona düş — Serie A/Ligue 1/Eredivisie/Championship'te
+      // sezon geçişinde tam bu yüzden hiç tahmin üretilmiyordu.
+      if (finished.length === 0) {
+        const prevYear = new Date().getUTCFullYear() - 1;
+        console.log(`${comp.name}: güncel sezonda bitmiş maç yok, ${prevYear} sezonuna düşülüyor...`);
         await sleep(6500);
-        const prevRes = await apiGet(`/competitions/${comp.code}/standings?season=${prevYear}`);
-        table = prevRes.standings?.find((s) => s.type === "TOTAL")?.table || [];
+        finished = await fetchFinishedMatches(comp.code, prevYear);
       }
 
-      if (table.length === 0) {
-        console.warn(`${comp.code}: puan durumu boş, atlanıyor`);
+      if (finished.length === 0) {
+        console.warn(`${comp.code}: bitmiş maç verisi yok, atlanıyor`);
         await sleep(6500);
         continue;
       }
-      const teamRows = table.map((t) => ({
-        id: t.team.id,
-        name: t.team.name,
-        played: t.playedGames,
-        goalsFor: t.goalsFor,
-        goalsAgainst: t.goalsAgainst,
-      }));
-      const { strengths, leagueAvgGoals } = buildTeamStrengths(teamRows);
+      const { strengths, leagueAvgGoals } = buildTeamStrengthsFromMatches(finished);
       for (const teamId of Object.keys(strengths)) {
         globalStrengths[teamId] = { ...strengths[teamId], leagueAvgGoals };
       }
@@ -252,7 +287,7 @@ async function run() {
           over_2_5_prob: Math.round(pOver25 * 100),
           under_2_5_prob: Math.round(pUnder25 * 100),
           confidence: confidenceLabel(pHome, pDraw, pAway),
-          model: "poisson-dc-v2",
+          model: "poisson-dc-v3",
           updated_at: admin.firestore.FieldValue.serverTimestamp(),
         });
         written++;
@@ -310,7 +345,7 @@ async function runContinentalCups(db, batch, globalStrengths) {
           over_2_5_prob: Math.round(pOver25 * 100),
           under_2_5_prob: Math.round(pUnder25 * 100),
           confidence: confidenceLabel(pHome, pDraw, pAway),
-          model: "poisson-dc-v2",
+          model: "poisson-dc-v3",
           updated_at: admin.firestore.FieldValue.serverTimestamp(),
         });
         written++;
